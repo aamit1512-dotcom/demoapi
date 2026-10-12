@@ -1,0 +1,56 @@
+
+name: Deploy Weather Frontend to IIS
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/deploy-frontend.yml'
+
+  workflow_dispatch:
+
+jobs:
+  deploy-frontend:
+    runs-on: self-hosted
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Validate frontend files
+        shell: powershell
+        run: |
+          $sourcePath = "$env:GITHUB_WORKSPACE\frontend"
+
+          if (!(Test-Path "$sourcePath\index.html")) {
+              throw "frontend/index.html not found."
+          }
+
+          if (!(Test-Path "$sourcePath\app.js")) {
+              throw "frontend/app.js not found."
+          }
+
+          if (!(Test-Path "$sourcePath\style.css")) {
+              throw "frontend/style.css not found."
+          }
+
+      - name: Deploy frontend to IIS
+        shell: powershell
+        run: |
+          $sourcePath = "$env:GITHUB_WORKSPACE\frontend"
+          $destinationPath = "C:\inetpub\wwwroot\weatherapp-frontend"
+
+          # Do not create the destination automatically.
+          if (!(Test-Path $destinationPath)) {
+              throw "IIS destination folder does not exist: $destinationPath"
+          }
+
+          # Copy only frontend files.
+          # Do not stop or restart the API application pool.
+          Copy-Item -Path "$sourcePath\*" `
+              -Destination $destinationPath `
+              -Recurse -Force
+
+          Write-Host "Frontend deployment completed successfully."
