@@ -15,7 +15,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
-app.MapGet("/", () => "DemoApi is running successfully");
+app.MapGet("/", () => "wow DemoApi is running successfully");
 
 var summaries = new[]
 {

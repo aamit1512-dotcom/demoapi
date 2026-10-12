@@ -1,15 +1,77 @@
-name: "Demoapi deployed on iis"
-on: 
-  push
- branches:
-  -main
-  jobs:
+name: Demoapi deployed on IIS
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
   build:
     runs-on: self-hosted
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      - name: Setup .NET Core SDK
-        uses: actions/setup-dotnet@v6.0.0
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
+
+      - name: Restore dependencies
+        shell: powershell
+        run: dotnet restore
+
+      - name: Build project
+        shell: powershell
+        run: dotnet build --configuration Release --no-restore
+
+      - name: Publish project
+        shell: powershell
+        run: dotnet publish --configuration Release --no-build --output "$env:GITHUB_WORKSPACE\publish"
+
+      - name: Deploy to IIS
+        shell: powershell
+        run: |
+          Import-Module WebAdministration
+
+          $publishPath = "$env:GITHUB_WORKSPACE\publish"
+          $iisSiteName = "weatherapp"
+          $iisAppPoolName = "weatherapp"
+          $iisPath = "C:\inetpub\wwwroot\weatherapp"
+
+          # Validate paths
+          if (!(Test-Path $publishPath)) {
+              throw "Publish folder not found: $publishPath"
+          }
+
+          if (!(Test-Path "$publishPath\web.config")) {
+              throw "Published web.config not found."
+          }
+
+          if (!(Test-Path $iisPath)) {
+              throw "IIS destination folder does not exist: $iisPath"
+          }
+
+          # Stop IIS site and application pool
+          Stop-WebSite -Name $iisSiteName
+          Stop-WebAppPool -Name $iisAppPoolName
+
+          try {
+              # Remove existing deployment files
+              Get-ChildItem -Path $iisPath -Force |
+                  Remove-Item -Recurse -Force
+
+              # Copy published files
+              Copy-Item -Path "$publishPath\*" `
+                  -Destination $iisPath `
+                  -Recurse -Force
+
+              Write-Host "Deployment completed successfully."
+          }
+          finally {
+              # Start IIS application pool and site
+              Start-WebAppPool -Name $iisAppPoolName
+              Start-WebSite -Name $iisSiteName
+          }
