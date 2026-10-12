@@ -1,0 +1,32 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WeatherApp</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <main class="container">
+        <h1>WeatherApp</h1>
+        <p>Get a real weather forecast for your city.</p>
+
+        <form id="weatherForm">
+            <input id="city" type="text" placeholder="Enter city, e.g. Noida"
+                   value="Noida" required>
+            <select id="days">
+                <option value="3">3 days</option>
+                <option value="5" selected>5 days</option>
+                <option value="7">7 days</option>
+            </select>
+            <button type="submit">Get Forecast</button>
+        </form>
+
+        <p id="message" role="status"></p>
+        <section id="results" class="forecast"></section>
+    </main>
+
+    <script src="app.js"></script>
+</body>
+</html>
