@@ -1,0 +1,15 @@
+name: "Demoapi deployed on iis"
+on: 
+  push
+ branches:
+  -main
+  jobs:
+  build:
+    runs-on: self-hosted
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Setup .NET Core SDK
+        uses: actions/setup-dotnet@v6.0.0
+        with:
+          dotnet-version: '8.0.x'
