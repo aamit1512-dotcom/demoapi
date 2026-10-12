@@ -39,7 +39,7 @@ jobs:
           $publishPath = "$env:GITHUB_WORKSPACE\publish"
           $iisSiteName = "weatherapp"
           $iisAppPoolName = "weatherapp"
-          $iisPath = "C:\inetpub\wwwroot\weatherapp"
+          $iisPath = "C:\inetpub\wwwroot\DemoApi\publish"
 
           # Validate paths
           if (!(Test-Path $publishPath)) {
