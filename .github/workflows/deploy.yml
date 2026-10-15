@@ -91,71 +91,36 @@ jobs:
         shell: powershell
         run: |
           $ErrorActionPreference = "Stop"
-          Import-Module WebAdministration
-
           $publishPath = "$env:GITHUB_WORKSPACE\publish"
-          $iisSiteName = "weatherapp"
-          $iisAppPoolName = "weatherapp"
           $iisPath = "C:\inetpub\wwwroot\DemoApi\publish"
+          $offlineFile = Join-Path $iisPath "app_offline.htm"
 
-          if (!(Test-Path "$publishPath\web.config")) {
-              throw "Published web.config not found: $publishPath"
+          if (!(Test-Path $publishPath)) {
+              throw "Published output not found: $publishPath"
           }
 
           if (!(Test-Path $iisPath)) {
               throw "IIS destination folder does not exist: $iisPath"
           }
 
-          if ((Get-Website -Name $iisSiteName).State -eq "Started") {
-              Stop-Website -Name $iisSiteName
-          }
-
-          if ((Get-WebAppPoolState -Name $iisAppPoolName).Value -eq "Started") {
-              Stop-WebAppPool -Name $iisAppPoolName
+          if (!(Test-Path "$iisPath\web.config")) {
+              throw "IIS web.config not found: $iisPath"
           }
 
           try {
-              Get-ChildItem -Path $iisPath -Force |
-                  Remove-Item -Recurse -Force
+              Set-Content -Path $offlineFile -Value "Application is updating. Please try again shortly." -Encoding UTF8
+              Start-Sleep -Seconds 10
+              & robocopy $publishPath $iisPath /MIR /XF appsettings.json web.config app_offline.htm /R:3 /W:5
+              $robocopyExitCode = $LASTEXITCODE
 
-              Copy-Item -Path "$publishPath\*" `
-                  -Destination $iisPath `
-                  -Recurse -Force
-
-              if (!(Test-Path "$iisPath\web.config")) {
-                  throw "Deployment verification failed: web.config is missing."
+              if ($robocopyExitCode -ge 8) {
+                  throw "Robocopy deployment failed with exit code $robocopyExitCode."
               }
 
-              Write-Host "API files copied successfully."
+              Write-Host "API files mirrored successfully (robocopy exit code $robocopyExitCode)."
           }
           finally {
-              $started = $false
-
-              for ($attempt = 1; $attempt -le 3; $attempt++) {
-                  try {
-                      if ((Get-WebAppPoolState -Name $iisAppPoolName).Value -ne "Started") {
-                          Start-WebAppPool -Name $iisAppPoolName
-                      }
-
-                      if ((Get-Website -Name $iisSiteName).State -ne "Started") {
-                          Start-Website -Name $iisSiteName
-                      }
-
-                      $started = $true
-                      break
-                  }
-                  catch {
-                      Write-Warning "IIS start attempt $attempt failed: $($_.Exception.Message)"
-
-                      if ($attempt -lt 3) {
-                          Start-Sleep -Seconds 5
-                      }
-                  }
-              }
-
-              if (-not $started) {
-                  throw "Could not start IIS site/application pool after 3 attempts."
-              }
+              Remove-Item -Path $offlineFile -Force -ErrorAction SilentlyContinue
           }
 
       - name: Verify API response
