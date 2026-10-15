@@ -147,10 +147,10 @@ jobs:
                     break
                   }
 
-                  Write-Host "Attempt $attempt: pool state is $poolState"
+                  Write-Host "Attempt ${attempt}: pool state is $poolState"
                 }
                 catch {
-                  Write-Warning "Attempt $attempt failed: $($_.Exception.Message)"
+                  Write-Warning "Attempt ${attempt} failed: $($_.Exception.Message)"
                 }
 
                 Start-Sleep -Seconds 5
