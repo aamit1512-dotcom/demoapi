@@ -1,13 +1,69 @@
+
+
+
 name: Demoapi deployed on IIS
 
 on:
   push:
     branches:
       - main
+      - feature/weather-api-update
+    paths-ignore:
+      - 'frontend/**'
+      - '.github/workflows/deploy-frontend.yml'
+      - '.github/workflows/pr-frontend.yml'
   workflow_dispatch:
 
+permissions:
+  contents: read
+  pull-requests: write
+
 jobs:
-  build:
+  create-api-pr:
+    if: github.ref == 'refs/heads/feature/weather-api-update'
+    runs-on: self-hosted
+
+    steps:
+      - name: Create or check API PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const head = "feature/weather-api-update";
+            const base = "main";
+
+            const existing = await github.rest.pulls.list({
+              owner,
+              repo,
+              head: `${owner}:${head}`,
+              base,
+              state: "open"
+            });
+
+            if (existing.data.length > 0) {
+              core.info(`API PR already exists: #${existing.data[0].number}`);
+              return;
+            }
+
+            const result = await github.rest.pulls.create({
+              owner,
+              repo,
+              title: "API: Update weather API",
+              head,
+              base,
+              body: [
+                "## API changes",
+                "",
+                "Review the API changes before merging into main.",
+                "The API deployment workflow runs after changes are merged."
+              ].join("\n")
+            });
+
+            core.info(`Created API PR: ${result.data.html_url}`);
+
+  deploy-api:
+    if: github.ref == 'refs/heads/main'
     runs-on: self-hosted
 
     steps:
@@ -34,41 +90,34 @@ jobs:
       - name: Deploy to IIS
         shell: powershell
         run: |
-          Import-Module WebAdministration
-
+          $ErrorActionPreference = "Stop"
           $publishPath = "$env:GITHUB_WORKSPACE\publish"
-          $iisSiteName = "weatherapp"
-          $iisAppPoolName = "weatherapp"
           $iisPath = "C:\inetpub\wwwroot\DemoApi\publish"
+          $offlineFile = Join-Path $iisPath "app_offline.htm"
 
-          # Validate paths
           if (!(Test-Path $publishPath)) {
-              throw "Publish folder not found: $publishPath"
-          }
-
-          if (!(Test-Path "$publishPath\web.config")) {
-              throw "Published web.config not found."
+              throw "Published output not found: $publishPath"
           }
 
           if (!(Test-Path $iisPath)) {
               throw "IIS destination folder does not exist: $iisPath"
           }
 
-          # Stop IIS site and application pool
-          Stop-WebSite -Name $iisSiteName
-          Stop-WebAppPool -Name $iisAppPoolName
+          if (!(Test-Path "$iisPath\web.config")) {
+              throw "IIS web.config not found: $iisPath"
+          }
 
           try {
-              # Remove existing deployment files
-              Get-ChildItem -Path $iisPath -Force |
-                  Remove-Item -Recurse -Force
+              Set-Content -Path $offlineFile -Value "Application is updating. Please try again shortly." -Encoding UTF8
+              Start-Sleep -Seconds 10
+              & robocopy $publishPath $iisPath /MIR /XF appsettings.json web.config app_offline.htm /R:3 /W:5
+              $robocopyExitCode = $LASTEXITCODE
 
-              # Copy published files
-              Copy-Item -Path "$publishPath\*" `
-                  -Destination $iisPath `
-                  -Recurse -Force
+              if ($robocopyExitCode -ge 8) {
+                  throw "Robocopy deployment failed with exit code $robocopyExitCode."
+              }
 
-              Write-Host "Deployment completed successfully."
+              Write-Host "API files mirrored successfully (robocopy exit code $robocopyExitCode)."
           }
           finally {
               # Start IIS application pool and site
@@ -118,4 +167,30 @@ jobs:
               }
 
               Write-Host "IIS application pool and website are running."
+              Remove-Item -Path $offlineFile -Force -ErrorAction SilentlyContinue
           }
+
+      - name: Verify API response
+        shell: powershell
+        run: |
+          $url = "http://localhost:90/api/weatherforecast?city=Delhi&days=5"
+
+          for ($attempt = 1; $attempt -le 6; $attempt++) {
+              try {
+                  $response = Invoke-RestMethod -Uri $url -TimeoutSec 15
+                  Write-Host "API health check passed."
+                  $response | ConvertTo-Json -Depth 10
+                  exit 0
+              }
+              catch {
+                  Write-Warning "API check attempt $attempt failed: $($_.Exception.Message)"
+
+                  if ($attempt -lt 6) {
+                      Start-Sleep -Seconds 5
+                  }
+              }
+          }
+
+          throw "API health check failed at $url"
+
+
