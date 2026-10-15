@@ -18,6 +18,7 @@ permissions:
 
 jobs:
   create-frontend-pr:
+    name: Create or Update Frontend PR
     if: github.ref == 'refs/heads/feature/weather-frontend'
     runs-on: ubuntu-latest
 
@@ -47,13 +48,14 @@ jobs:
                 title: "Deploy Weather Frontend",
                 head: "feature/weather-frontend",
                 base,
-                body: "Automated PR for frontend changes."
+                body: "Automated pull request for frontend changes."
               });
 
               core.info(`Created frontend PR #${pr.number}`);
             }
 
   deploy-frontend:
+    name: Deploy Frontend to IIS
     if: github.ref == 'refs/heads/main'
     runs-on: self-hosted
 
@@ -67,10 +69,14 @@ jobs:
           $sourcePath = "$env:GITHUB_WORKSPACE\frontend"
 
           foreach ($file in @("index.html", "app.js", "style.css")) {
-              if (!(Test-Path "$sourcePath\$file")) {
+              $filePath = Join-Path $sourcePath $file
+
+              if (!(Test-Path $filePath)) {
                   throw "Required frontend file not found: frontend/$file"
               }
           }
+
+          Write-Host "Frontend validation passed."
 
       - name: Deploy frontend to IIS
         shell: powershell
@@ -82,10 +88,11 @@ jobs:
               throw "IIS destination folder does not exist: $destinationPath"
           }
 
-          # Copy and update files without deleting existing destination files.
+          # Copy frontend files without deleting existing destination files.
+          # Do not stop or restart the API application pool.
           Copy-Item -Path "$sourcePath\*" `
               -Destination $destinationPath `
-              -Recurse -Force
+              -Recurse -Force -ErrorAction Stop
 
           Write-Host "Frontend files copied successfully."
 
@@ -97,12 +104,18 @@ jobs:
 
           for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
               try {
-                  $response = Invoke-WebRequest -Uri $url -TimeoutSec 15
-                  
+                  $response = Invoke-WebRequest `
+                      -Uri $url `
+                      -UseBasicParsing `
+                      -TimeoutSec 15
+
                   if ($response.StatusCode -eq 200) {
                       Write-Host "Frontend health check passed."
+                      Write-Host "HTTP Status: $($response.StatusCode)"
                       exit 0
                   }
+
+                  Write-Warning "Attempt ${attempt}: HTTP status $($response.StatusCode)"
               }
               catch {
                   Write-Warning "Attempt ${attempt} failed: $($_.Exception.Message)"
