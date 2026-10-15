@@ -5,14 +5,56 @@ on:
   push:
     branches:
       - main
+      - feature/weather-frontend
     paths:
       - 'frontend/**'
-      - '.github/workflows/deploy-frontend.yml'
+      - '.github/workflows/deployfrontend.yml'
 
   workflow_dispatch:
 
+permissions:
+  contents: read
+  pull-requests: write
+
 jobs:
+  create-frontend-pr:
+    if: github.ref == 'refs/heads/feature/weather-frontend'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Create or update frontend PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const head = `${owner}:feature/weather-frontend`;
+            const base = "main";
+
+            const { data: pulls } = await github.rest.pulls.list({
+              owner,
+              repo,
+              head,
+              base,
+              state: "open"
+            });
+
+            if (pulls.length > 0) {
+              core.info(`Frontend PR already exists: #${pulls[0].number}`);
+            } else {
+              const { data: pr } = await github.rest.pulls.create({
+                owner,
+                repo,
+                title: "Deploy Weather Frontend",
+                head: "feature/weather-frontend",
+                base,
+                body: "Automated PR for frontend changes."
+              });
+
+              core.info(`Created frontend PR #${pr.number}`);
+            }
+
   deploy-frontend:
+    if: github.ref == 'refs/heads/main'
     runs-on: self-hosted
 
     steps:
@@ -24,16 +66,10 @@ jobs:
         run: |
           $sourcePath = "$env:GITHUB_WORKSPACE\frontend"
 
-          if (!(Test-Path "$sourcePath\index.html")) {
-              throw "frontend/index.html not found."
-          }
-
-          if (!(Test-Path "$sourcePath\app.js")) {
-              throw "frontend/app.js not found."
-          }
-
-          if (!(Test-Path "$sourcePath\style.css")) {
-              throw "frontend/style.css not found."
+          foreach ($file in @("index.html", "app.js", "style.css")) {
+              if (!(Test-Path "$sourcePath\$file")) {
+                  throw "Required frontend file not found: frontend/$file"
+              }
           }
 
       - name: Deploy frontend to IIS
@@ -42,15 +78,39 @@ jobs:
           $sourcePath = "$env:GITHUB_WORKSPACE\frontend"
           $destinationPath = "C:\inetpub\wwwroot\weatherapp-frontend"
 
-          # Do not create the destination automatically.
           if (!(Test-Path $destinationPath)) {
               throw "IIS destination folder does not exist: $destinationPath"
           }
 
-          # Copy only frontend files.
-          # Do not stop or restart the API application pool.
+          # Copy and update files without deleting existing destination files.
           Copy-Item -Path "$sourcePath\*" `
               -Destination $destinationPath `
               -Recurse -Force
 
-          Write-Host "Frontend deployment completed successfully."
+          Write-Host "Frontend files copied successfully."
+
+      - name: Verify frontend response
+        shell: powershell
+        run: |
+          $url = "http://localhost:91/"
+          $maxAttempts = 6
+
+          for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
+              try {
+                  $response = Invoke-WebRequest -Uri $url -TimeoutSec 15
+                  
+                  if ($response.StatusCode -eq 200) {
+                      Write-Host "Frontend health check passed."
+                      exit 0
+                  }
+              }
+              catch {
+                  Write-Warning "Attempt ${attempt} failed: $($_.Exception.Message)"
+              }
+
+              if ($attempt -lt $maxAttempts) {
+                  Start-Sleep -Seconds 5
+              }
+          }
+
+          throw "Frontend health check failed at $url"
