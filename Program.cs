@@ -9,7 +9,19 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddHttpClient();
 
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("WeatherFrontend", policy =>
+    {
+        policy
+            .WithOrigins("http://localhost:91")
+            .AllowAnyHeader()
+            .AllowAnyMethod();
+    });
+});
+
 var app = builder.Build();
+app.UseCors("WeatherFrontend");
 
 // Swagger
 if (app.Environment.IsDevelopment())
