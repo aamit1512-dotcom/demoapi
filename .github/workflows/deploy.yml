@@ -120,6 +120,53 @@ jobs:
               Write-Host "API files mirrored successfully (robocopy exit code $robocopyExitCode)."
           }
           finally {
+              # Start IIS application pool and site
+              $maxAttempts = 5
+              $started = $false
+
+              # Wait until IIS can start the application pool
+              for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
+                try {
+                  $poolState = (Get-WebAppPoolState -Name $iisAppPoolName).Value
+
+                  if ($poolState -eq "Started") {
+                    Write-Host "Application pool is already started."
+                    $started = $true
+                    break
+                  }
+
+                  if ($poolState -eq "Stopped") {
+                    Start-WebAppPool -Name $iisAppPoolName
+                  }
+
+                  Start-Sleep -Seconds 3
+                  $poolState = (Get-WebAppPoolState -Name $iisAppPoolName).Value
+
+                  if ($poolState -eq "Started") {
+                    $started = $true
+                    break
+                  }
+
+                  Write-Host "Attempt $attempt: pool state is $poolState"
+                }
+                catch {
+                  Write-Warning "Attempt $attempt failed: $($_.Exception.Message)"
+                }
+
+                Start-Sleep -Seconds 5
+              }
+
+              if (-not $started) {
+                throw "Application pool '$iisAppPoolName' did not start after $maxAttempts attempts."
+              }
+
+              # Start the website only after the pool is ready
+              $siteState = (Get-Website -Name $iisSiteName).State
+              if ($siteState -ne "Started") {
+                Start-Website -Name $iisSiteName
+              }
+
+              Write-Host "IIS application pool and website are running."
               Remove-Item -Path $offlineFile -Force -ErrorAction SilentlyContinue
           }
 
