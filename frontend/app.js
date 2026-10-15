@@ -20,13 +20,29 @@ form.addEventListener("submit", async (event) => {
             `?city=${encodeURIComponent(city)}&days=${days}`;
 
         const response = await fetch(url);
+        const responseText = await response.text();
 
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.error || `HTTP ${response.status}`);
+        let data = null;
+
+        if (responseText.trim()) {
+            try {
+                data = JSON.parse(responseText);
+            } catch {
+                throw new Error(
+                    `Invalid response from API (HTTP ${response.status}).`
+                );
+            }
         }
 
-        const data = await response.json();
+        if (!response.ok) {
+            throw new Error(
+                data?.error || `API request failed: HTTP ${response.status}`
+            );
+        }
+
+        if (!data || !Array.isArray(data.forecast)) {
+            throw new Error("The API returned no forecast data.");
+        }
 
         message.textContent =
             `Forecast for ${data.city} — ${data.days} days`;
