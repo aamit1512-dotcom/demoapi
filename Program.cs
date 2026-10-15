@@ -14,7 +14,7 @@ builder.Services.AddCors(options =>
     options.AddPolicy("WeatherFrontend", policy =>
     {
         policy
-            .WithOrigins("http://localhost:5500")
+            .WithOrigins("http://localhost:91")
             .AllowAnyHeader()
             .AllowAnyMethod();
     });
