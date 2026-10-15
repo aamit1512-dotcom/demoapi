@@ -1,11 +1,17 @@
 
 
+
 name: Demoapi deployed on IIS
 
 on:
   push:
     branches:
       - main
+      - feature/weather-api-update
+    paths-ignore:
+      - 'frontend/**'
+      - '.github/workflows/deploy-frontend.yml'
+      - '.github/workflows/pr-frontend.yml'
   workflow_dispatch:
 
 permissions:
@@ -174,4 +180,5 @@ jobs:
           }
 
           throw "API health check failed at $url"
+
 
