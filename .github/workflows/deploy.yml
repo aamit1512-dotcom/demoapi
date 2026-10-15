@@ -7,8 +7,7 @@ on:
       - feature/weather-api-update
     paths-ignore:
       - 'frontend/**'
-      - '.github/workflows/deploy-frontend.yml'
-      - '.github/workflows/pr-frontend.yml'
+      - '.github/workflows/deployfrontend.yml'
   workflow_dispatch:
 
 permissions:
