@@ -156,6 +156,11 @@ jobs:
                   throw "Robocopy deployment failed with exit code $robocopyExitCode."
               }
 
+              # FIX: robocopy exit codes 1-7 mean success, but GitHub's PowerShell wrapper
+              # ends the step with the last $LASTEXITCODE, so a code like 3 fails the step.
+              # Reset it now that we have checked it ourselves.
+              $global:LASTEXITCODE = 0
+
               Write-Host "API files mirrored successfully (robocopy exit code $robocopyExitCode)."
           }
           finally {
