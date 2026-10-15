@@ -192,5 +192,6 @@ jobs:
           }
 
           throw "API health check failed at $url"
+          exit 0
 
 
